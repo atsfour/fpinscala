@@ -60,6 +60,11 @@ object List {
     case Cons(x, xs) => xs
   }
 
+  def head[A](l: List[A]): A = l match {
+    case Nil => sys.error("head of Nil")
+    case Cons(x, xs) => x
+  }
+
   //exercise 3.3
   def setHead[A](l: List[A], h: A): List[A] = l match {
     case Nil => sys.error("head of Nil")
@@ -168,6 +173,20 @@ object List {
         case Nil => Nil
         case Cons(y, ys) => Cons(f(x, y), zipWith(xs, ys)(f))
       }
+    }
+  }
+
+  //exercise 3.24
+  def hasSubsequence[A](sup: List[A], sub: List[A]): Boolean = {
+    def startsWith(l: List[A], prefix: List[A]): Boolean = (l, prefix) match{
+      case (_, Nil) => true
+      case (Cons(h, t), Cons(ph, pt)) if h == ph => startsWith(t, pt)
+      case _ => false
+    }
+    sup match {
+      case Nil => false
+      case _ if startsWith(sup, sub) => true
+      case Cons(x, xs) => hasSubsequence(xs, sub)
     }
   }
 }
