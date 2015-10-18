@@ -117,16 +117,42 @@ object RNG {
     sequence(List.fill(count)(int))
   }
 
-  def flatMap[A,B](f: Rand[A])(g: A => Rand[B]): Rand[B] = ???
+  // exercise 6.8
+  def flatMap[A,B](f: Rand[A])(g: A => Rand[B]): Rand[B] = rng => {
+    val (a, r) = f(rng)
+    g(a)(r)
+  }
+
+  def nonNegativeLessThan(n: Int): Rand[Int] = {
+    flatMap(nonNegativeInt)(i => {
+      val mod = i % n
+      if (i + (n + 1) - mod >= 0) unit(mod) else nonNegativeLessThan(n)
+    })
+  }
+
+  //exercise 6.9
+  def map_new[A,B](s: Rand[A])(f: A => B): Rand[B] = {
+    flatMap(s)(a => unit(f(a)))
+  }
+
+  def map2_new[A,B,C](ra: Rand[A], rb: Rand[B])(f: (A, B) => C): Rand[C] = {
+    flatMap(ra)(a => map(rb)(b => f(a, b)))
+  }
+
 }
 
 case class State[S,+A](run: S => (A, S)) {
-  def map[B](f: A => B): State[S, B] =
-    sys.error("todo")
-  def map2[B,C](sb: State[S, B])(f: (A, B) => C): State[S, C] =
-    sys.error("todo")
-  def flatMap[B](f: A => State[S, B]): State[S, B] =
-    sys.error("todo")
+  import fpinscala.state.State._
+  //exercise 6.10
+  def map[B](f: A => B): State[S, B] = flatMap(a => unit(f(a)))
+
+  def map2[B,C](sb: State[S, B])(f: (A, B) => C): State[S, C] = flatMap(a => sb.map(b => f(a, b)))
+  def flatMap[B](f: A => State[S, B]): State[S, B] = {
+    State(s => {
+      val (a, ss) = run(s)
+      f(a).run(ss)
+    })
+  }
 }
 
 sealed trait Input
@@ -137,5 +163,13 @@ case class Machine(locked: Boolean, candies: Int, coins: Int)
 
 object State {
   type Rand[A] = State[RNG, A]
+
+  // exercise 6.10
+  def unit[S,A](a: A): State[S, A] = State(s => (a, s))
+
+  def sequence[S,A](states: List[State[S, A]]): State[S, List[A]] = {
+    states.foldRight(unit[S, List[A]](Nil))((h, ss) => h.map2(ss)(_ :: _))
+  }
+
   def simulateMachine(inputs: List[Input]): State[Machine, (Int, Int)] = ???
 }
