@@ -165,7 +165,7 @@ object List {
   }
 
   //exercise 3.23
-  def zipWith[A,B](l1: List[A], l2: List[A])(f: (A, A) => B): List[B] = {
+  def zipWith[A,B,C](l1: List[A], l2: List[B])(f: (A, B) => C): List[C] = {
     // if l1 and l2 are not same length, cut off the rest of longer one.
     l1 match {
       case Nil => Nil
