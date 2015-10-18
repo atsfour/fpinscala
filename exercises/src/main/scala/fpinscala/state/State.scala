@@ -46,9 +46,14 @@ object RNG {
   }
 
   //exercise 6.2
-  def double(rng: RNG): (Double, RNG) = {
+  def double0(rng: RNG): (Double, RNG) = {
     val (i, r) = nonNegativeInt(rng)
     (i / (Int.MaxValue.toDouble + 1) ,r)
+  }
+
+  //exercise 6.5
+  def double(rng: RNG): (Double, RNG) = {
+    map(nonNegativeInt)(_ / (Int.MaxValue.toDouble + 1))(rng)
   }
 
   //exercise 6.3
@@ -82,9 +87,35 @@ object RNG {
     go(count)(rng)(Nil)
   }
 
-  def map2[A,B,C](ra: Rand[A], rb: Rand[B])(f: (A, B) => C): Rand[C] = ???
+  //exercise 6.6
+  def map2[A,B,C](ra: Rand[A], rb: Rand[B])(f: (A, B) => C): Rand[C] = {
+    rng => {
+      val (a, r1) = ra(rng)
+      val (b, r2) = rb(r1)
+      (f(a, b), r2)
+    }
+  }
 
-  def sequence[A](fs: List[Rand[A]]): Rand[List[A]] = ???
+  //exercise 6.7
+  def sequence0[A](fs: List[Rand[A]]): Rand[List[A]] = rng => {
+    @tailrec
+    def go(as: List[Rand[A]])(acc: List[A])(r: RNG): (List[A], RNG) = as match {
+      case Nil => (acc, r)
+      case h :: t => {
+        val (aa, rr) = h(r)
+        go(t)(aa :: acc)(rr)
+      }
+    }
+    go(fs)(Nil)(rng)
+  }
+
+  def sequence[A](fs: List[Rand[A]]): Rand[List[A]] = {
+    fs.foldRight(unit(Nil: List[A]))((h, rs) => map2(h, rs)(_ :: _))
+  }
+
+  def ints1(count: Int): Rand[List[Int]] = {
+    sequence(List.fill(count)(int))
+  }
 
   def flatMap[A,B](f: Rand[A])(g: A => Rand[B]): Rand[B] = ???
 }
