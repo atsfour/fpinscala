@@ -28,10 +28,26 @@ object Par {
       def call = a(es).get
     })
 
+  //exercise 7.4
+  def lazyUnit[A](a: A): Par[A] = fork(unit(a))
+
+  def asyncF[A,B](f: A => B): A => Par[B] = a => lazyUnit(f(a))
+
   def map[A,B](pa: Par[A])(f: A => B): Par[B] = 
     map2(pa, unit(()))((a,_) => f(a))
 
   def sortPar(parList: Par[List[Int]]) = map(parList)(_.sorted)
+
+  //exercise 7.5
+  def sequence[A](ps: List[Par[A]]): Par[List[A]] = {
+    ps.foldRight(unit(Nil: List[A]))((p, acc) => map2(p, acc)(_ :: _))
+  }
+
+  def parMap[A,B](ps: List[A])(f: A => B): Par[List[B]] = fork {
+    val fbs: List[Par[B]] = ps.map(asyncF(f))
+    sequence(fbs)
+  }
+
 
   def equal[A](e: ExecutorService)(p: Par[A], p2: Par[A]): Boolean = 
     p(e).get == p2(e).get
