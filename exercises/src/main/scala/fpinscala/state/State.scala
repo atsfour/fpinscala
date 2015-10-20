@@ -171,5 +171,29 @@ object State {
     states.foldRight(unit[S, List[A]](Nil))((h, ss) => h.map2(ss)(_ :: _))
   }
 
-  def simulateMachine(inputs: List[Input]): State[Machine, (Int, Int)] = ???
+  def get0[S]: State[S, S] = State(s => (s, s))
+
+  def set0[S](s: S): State[S, Unit] = State(_ => ((), s))
+
+  def modify[S](f: S => S): State[S, Unit] = for{
+    s <- get0
+    _ <- set0(f(s))
+  } yield ()
+
+  def simulateMachine(inputs: List[Input]): State[Machine, (Int, Int)] = {
+    val updateMachine: Input => Machine => Machine = {
+      (i: Input) => (m: Machine) => (i, m) match {
+          case (_, Machine(_, 0, _)) => m
+          case (Turn, Machine(true, _, _)) => m
+          case (Turn, Machine(false, ca, co)) => Machine(true, ca - 1, co)
+          case (Coin, Machine(false, _, _)) => m
+          //ロックが解除された状態でコインが投入されると、コインを蓄積しない（お釣りとしてでてくると考える）
+          case (Coin, Machine(true, ca, co)) => Machine(false, ca, co + 1)
+        }
+    }
+    for {
+      _ <- sequence(inputs.map(i => modify(updateMachine(i))))
+      s <- get0
+    } yield (s.candies, s.coins)
+  }
 }
