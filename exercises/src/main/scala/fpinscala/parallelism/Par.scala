@@ -48,6 +48,16 @@ object Par {
     sequence(fbs)
   }
 
+  //exercise 7.6
+  def parFilter[A](ps: List[A])(f: A => Boolean): Par[List[A]] = {
+    val res: List[Par[List[A]]] = ps.map(asyncF((a: A) => if (f(a)) List(a) else Nil))
+    map(sequence(res))(_.flatten)
+  }
+
+  def map3[A,B,C,D](pa: Par[A], pb: Par[B], pc: Par[C])(f: (A, B, C) => D): Par[D] = {
+    val partial: Par[A => D] = map2(pb, pc)((b, c) => (a: A) => f(a, b, c))
+    map2(pa, partial)((a, pf) => pf(a))
+  }
 
   def equal[A](e: ExecutorService)(p: Par[A], p2: Par[A]): Boolean = 
     p(e).get == p2(e).get
