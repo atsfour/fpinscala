@@ -128,6 +128,10 @@ trait Stream[+A] {
     }
   }
 
+  def zip[B](s: Stream[B]): Stream[(A, B)] = {
+    this.zipWith(s)((_, _))
+  }
+
   def zipAll[B](s2: Stream[B]): Stream[(Option[A], Option[B])] = {
     unfold((this, s2)){
       case (Empty, Empty) => None
