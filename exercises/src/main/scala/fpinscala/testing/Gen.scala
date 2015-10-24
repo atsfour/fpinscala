@@ -26,7 +26,7 @@ case class Prop(run: (MaxSize, TestCases, RNG) => Result) {
   def ||(p: Prop): Prop = Prop {
     (max, n, rng) => run(max, n, rng) match {
       case Falsified(msg, _) => p.tag(msg).run(max, n, rng)
-      case p => p
+      case pass => pass
     }
   }
 
@@ -71,7 +71,7 @@ object Prop {
 
 
   def forAll[A](g: SGen[A])(f: A => Boolean): Prop = {
-    forAll(g.forSize(_))(f)
+    forAll(i => g.forSize(i))(f)
   }
 
   def forAll[A](g: Int => Gen[A])(f: A => Boolean): Prop = Prop {
