@@ -18,8 +18,8 @@ case class Prop(run: (MaxSize, TestCases, RNG) => Result) {
   //exercise 8.9
   def &&(p: Prop): Prop = Prop {
     (max, n, rng) => run(max, n, rng) match {
-      case Passed => p.run(max, n, rng)
-      case f => f
+      case f: Falsified => f
+      case pp => p.run(max, n, rng)
     }
   }
 
@@ -32,7 +32,7 @@ case class Prop(run: (MaxSize, TestCases, RNG) => Result) {
 
   def tag(msg: FailedCase): Prop = Prop {
     (max, n, rng) => run(max, n, rng) match {
-      case Falsified(m, i) => Falsified(msg + "¥n" + m, i)
+      case Falsified(m, i) => Falsified(msg + "\n" + m, i)
       case p => p
     }
   }
@@ -58,6 +58,20 @@ object Prop {
     def isFalsified = true
   }
 
+  case object Proved extends Result {
+    def isFalsified = false
+  }
+
+  def randomStream[A](g: Gen[A])(rng: RNG): Stream[A] = {
+    Stream.unfold(rng)(rng => Some(g.sample.run(rng)))
+  }
+
+  def buildMsg[A](s: A, e: Exception): String = {
+    s"test case: $s" + "\n" +
+      s"generated an exception: ${e.getMessage}" + "\n" +
+      s"stack trace: ${e.getStackTrace.mkString("\n")}"
+  }
+
   def forAll[A](as: Gen[A])(f: A => Boolean): Prop = Prop {
     (max, n, rng) => randomStream(as)(rng).zip(Stream.from(0)).take(n).map {
       case (a, i) =>
@@ -68,7 +82,6 @@ object Prop {
         }
     }.find(_.isFalsified).getOrElse(Passed)
   }
-
 
   def forAll[A](g: SGen[A])(f: A => Boolean): Prop = {
     forAll(i => g.forSize(i))(f)
@@ -86,14 +99,34 @@ object Prop {
       prop.run(max, n, rng)
   }
 
-  def randomStream[A](g: Gen[A])(rng: RNG): Stream[A] = {
-    Stream.unfold(rng)(rng => Some(g.sample.run(rng)))
+  def forAllPar[A](g: Gen[A])(f: A => Par[Boolean]): Prop = {
+    val s = weighted(
+      choose(1, 4).map(Executors.newFixedThreadPool) -> 0.75,
+      unit(Executors.newCachedThreadPool) -> 0.25
+    )
+    forAll(s ** g) { case (s, a) => f(a)(s).get }
   }
 
-  def buildMsg[A](s: A, e: Exception): String = {
-    s"test case: ${s}¥n" +
-      s"generated an exception: ${e.getMessage}¥n" +
-      s"stack trace: ${e.getStackTrace.mkString("¥n")}"
+  def check(p: => Boolean): Prop = Prop { (_, _, _) =>
+    if (p) Proved else Falsified("()", 0)
+  }
+
+  def checkPar(p: Par[Boolean]): Prop = {
+    forAllPar(unit())(_ => p)
+  }
+
+  def run(p: Prop,
+          maxSize: Int = 100,
+          testCases: Int = 100,
+          rng: => RNG = RNG.Simple(System.currentTimeMillis)): Unit = {
+    p.run(maxSize, testCases, rng) match {
+      case Falsified(msg, n) =>
+        println(s"! Falsified after $n passed tests: \n $msg ")
+      case Passed =>
+        println(s"+ OK, passed $testCases tests.")
+      case Proved =>
+        println(s"+ OK, proved property.")
+    }
   }
 
 }
@@ -154,16 +187,36 @@ object Gen {
   def listOf[A](g: Gen[A]): SGen[List[A]] = {
     SGen(n => listOfN(n, g))
   }
+
+  //exercise 8.13
+  def listOf1[A](g: Gen[A]): SGen[List[A]] = {
+    SGen(n => listOfN(n max 1, g))
+  }
+
+  def pint: Gen[Par[Int]] = choose(0, 10).map(Par.unit)
+
+  //exercise 8.16
+  def pint2: Gen[Par[Int]] = {
+    choose(0, 100).listOfN(choose(0, 20)).map(l =>
+      l.foldLeft(Par.unit(0))((p, i) =>
+        Par.fork {
+          Par.map2(p, Par.unit(i))(_ + _)
+        }))
+  }
 }
 
 case class Gen[A](sample: State[RNG, A]) {
 
-  def stateValue(seed: Int): (A, RNG) = {
+  def stateValue(seed: => Long = System.currentTimeMillis()): (A, RNG) = {
     this.sample.run(RNG.Simple(seed))
   }
 
   def map[B](f: A => B): Gen[B] = {
-    Gen(sample.map(a => f(a)))
+    Gen(sample.map(f))
+  }
+
+  def map2[B, C](g: Gen[B])(f: (A, B) => C): Gen[C] = {
+    Gen(sample.map2(g.sample)(f))
   }
 
   //exercise 8.6
@@ -176,11 +229,14 @@ case class Gen[A](sample: State[RNG, A]) {
   }
 
   //exercise 8.10
-  def unsized: SGen[A] = SGen((i: Int) => this)
+  def unSized: SGen[A] = SGen((i: Int) => this)
 
+  def **[B](g: Gen[B]): Gen[(A, B)] = {
+    this.map2(g)((_, _))
+  }
 }
 
-case class SGen[+A](forSize: Int => Gen[A]) {
+case class SGen[A](forSize: Int => Gen[A]) {
   //exercise 8.11
   def map[B](f: A => B): SGen[B] = {
     SGen(forSize andThen (_.map(f)))
@@ -191,3 +247,32 @@ case class SGen[+A](forSize: Int => Gen[A]) {
   }
 }
 
+case object SampleProps {
+  val smallIntGen = Gen.choose(-9, 10)
+  val maxProp = forAll(listOf1(smallIntGen)) { ns =>
+    val maxN = ns.max
+    !ns.exists(_ > maxN)
+  }
+
+  // exercise 8.14
+  val sortedProp = forAll(listOf1(smallIntGen))(ns => {
+    val nsSorted = ns.sorted
+    nsSorted.foldLeft(true, Int.MinValue) {
+      case ((b, i1), i2) => (b && (i1 <= i2), i2)
+    }._1 &&
+      nsSorted.forall(ns.contains(_)) &&
+      !nsSorted.exists(!ns.contains(_))
+  })
+
+  val p2: Prop = checkPar {
+    Par.equal(
+      Par.map(Par.unit(1))(_ + 1),
+      Par.unit(2)
+    )
+  }
+
+  //exercise 8.17
+  val forkProp: Prop = {
+    forAllPar(pint2)(n => Par.equal(Par.fork(n), n))
+  }
+}
