@@ -203,6 +203,7 @@ object Gen {
           Par.map2(p, Par.unit(i))(_ + _)
         }))
   }
+
 }
 
 case class Gen[A](sample: State[RNG, A]) {
@@ -274,5 +275,17 @@ case object SampleProps {
   //exercise 8.17
   val forkProp: Prop = {
     forAllPar(pint2)(n => Par.equal(Par.fork(n), n))
+  }
+
+  //exersise 8.18
+  def takeWhileProp(f: Int => Boolean = {(i: Int) => i % 2 == 0}): Prop = {
+    forAll(listOf(choose(0, 10)))(ns => {
+      val tw: List[Int] = ns.takeWhile(f)
+      val dw: List[Int] = ns.dropWhile(f)
+      tw.forall(f) &&
+        ns.startsWith(tw) &&
+        !dw.headOption.exists(f) &&
+        (tw ++ dw) == ns
+    })
   }
 }
