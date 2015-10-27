@@ -18,7 +18,7 @@ trait Parsers[Parser[+ _]] {
     ParserOps(f(a))
   }
 
-  def or[A](p1: Parser[A], p2: Parser[A]): Parser[A]
+  def or[A](p1: Parser[A], p2: => Parser[A]): Parser[A]
 
   def run[A](p: Parser[A])(input: String): Either[ParseError, A]
 
@@ -26,21 +26,36 @@ trait Parsers[Parser[+ _]] {
 
   def succeed[A](a: A): Parser[A] = string("") map (_ => a)
 
-  def product[A,B](p1: Parser[A], p2: Parser[B]): Parser[(A, B)]
+  def product[A, B](p1: Parser[A], p2: => Parser[B]): Parser[(A, B)]
 
   def char(c: Char): Parser[Char] = {
     string(c.toString) map (_.charAt(0))
   }
 
-  def many[A](p: Parser[A]): Parser[List[A]]
+  def many[A](p: Parser[A]): Parser[List[A]] = {
+    map2(p, many(p))(_ :: _) or succeed(Nil: List[A])
+  }
+
+  //exercise 9.1
+  def many1[A](p: Parser[A]): Parser[List[A]] = {
+    map2(p, many(p))(_ :: _)
+  }
 
   def map[A, B](p: Parser[A])(f: A => B): Parser[B]
 
-  def map2[A, B, C](p1: Parser[A], p2: Parser[B])(f: (A, B) => C): Parser[C] = {
-    product(p1, p2).map{case (a, b) => f(a, b)}
+  //exercise 9.1
+  def map2[A, B, C](p1: Parser[A], p2: => Parser[B])(f: (A, B) => C): Parser[C] = {
+    product(p1, p2).map { case (a, b) => f(a, b) }
   }
 
-  def listOfN[A](n: Int, p: Parser[A]): Parser[List[A]]
+  //exercise 9.4
+  def listOfN[A](n: Int, p: Parser[A]): Parser[List[A]] = {
+    def go(n: Int, p: Parser[A], acc: Parser[List[A]]): Parser[List[A]] = n match {
+      case i if i > 0 => go(n - 1, p, p.map2(acc)(_ :: _))
+      case _ => acc
+    }
+    go(n, p, succeed(Nil: List[A]))
+  }
 
   case class ParserOps[A](p: Parser[A]) {
     def |[B >: A](p2: Parser[B]): Parser[B] = {
@@ -51,11 +66,15 @@ trait Parsers[Parser[+ _]] {
       self.or(p, p2)
     }
 
-    def map[B](f: A => B): Parser[B] = self.map(p)(f)
+    def slice: Parser[String] = self.slice(p)
 
     def many: Parser[List[A]] = self.many(p)
 
-    def slice: Parser[String] = self.slice(p)
+    def many1: Parser[List[A]] = self.many1(p)
+
+    def map[B](f: A => B): Parser[B] = self.map(p)(f)
+
+    def map2[B, C](p2: Parser[B])(f: (A, B) => C): Parser[C] = self.map2(p, p2)(f)
 
     def product[B](p2: Parser[B]): Parser[(A, B)] = self.product(p, p2)
 
@@ -93,6 +112,21 @@ trait Parsers[Parser[+ _]] {
 
     def succeedLaw[A](in: Gen[A]): Prop = {
       forAll(in)(a => run(succeed(a))("") == Right(a))
+    }
+
+    //exercise 9.2
+    def productAssociativeLaw[A, B, C](p1: Parser[A], p2: Parser[B], p3: Parser[C])(in: Gen[String]): Prop = {
+      def unbiasL[A, B, C](p: ((A, B), C)): (A, B, C) = (p._1._1, p._1._2, p._2)
+      def unbiasR[A, B, C](p: (A, (B, C))): (A, B, C) = (p._1, p._2._1, p._2._2)
+      val left = (p1 ** p2) ** p3 map unbiasL
+      val right = p1 ** (p2 ** p3) map unbiasR
+      equal(left, right)(in)
+    }
+
+    def productMapLaw[A,B,C,D](p1: Parser[A], p2: Parser[B])(f: A => C, g: B => D)(in: Gen[String]): Prop = {
+      val left = p1.map(f) ** p2.map(g)
+      val right = (p1 ** p2).map{case (a, b) => (f(a), g(b))}
+      equal(left, right)(in)
     }
   }
 
