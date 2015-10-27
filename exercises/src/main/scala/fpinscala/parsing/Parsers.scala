@@ -5,7 +5,7 @@ import scala.util.matching.Regex
 import fpinscala.testing._
 import fpinscala.testing.Prop._
 
-trait Parsers[Parser[+ _]] {
+trait Parsers[Err, Parser[+ _]] {
   self =>
   // so inner classes may call methods of trait
 
@@ -18,6 +18,8 @@ trait Parsers[Parser[+ _]] {
     ParserOps(f(a))
   }
 
+  implicit def regex(r: Regex): Parser[String]
+
   def or[A](p1: Parser[A], p2: => Parser[A]): Parser[A]
 
   def run[A](p: Parser[A])(input: String): Either[ParseError, A]
@@ -26,7 +28,11 @@ trait Parsers[Parser[+ _]] {
 
   def succeed[A](a: A): Parser[A] = string("") map (_ => a)
 
-  def product[A, B](p1: Parser[A], p2: => Parser[B]): Parser[(A, B)]
+  //exercise 9.7
+  def product[A, B](p1: Parser[A], p2: => Parser[B]): Parser[(A, B)] = for {
+    a <- p1
+    b <- p2
+  } yield (a, b)
 
   def char(c: Char): Parser[Char] = {
     string(c.toString) map (_.charAt(0))
@@ -41,12 +47,23 @@ trait Parsers[Parser[+ _]] {
     map2(p, many(p))(_ :: _)
   }
 
-  def map[A, B](p: Parser[A])(f: A => B): Parser[B]
+  //exercise 9.8
+  def map[A, B](p: Parser[A])(f: A => B): Parser[B] = {
+    flatMap(p)(a => succeed(f(a)))
+  }
 
   //exercise 9.1
-  def map2[A, B, C](p1: Parser[A], p2: => Parser[B])(f: (A, B) => C): Parser[C] = {
+  def map2_0[A, B, C](p1: Parser[A], p2: => Parser[B])(f: (A, B) => C): Parser[C] = {
     product(p1, p2).map { case (a, b) => f(a, b) }
   }
+
+  //exercise 9.7
+  def map2[A, B, C](p1: Parser[A], p2: => Parser[B])(f: (A, B) => C): Parser[C] = for {
+    a <- p1
+    b <- p2
+  } yield f(a, b)
+
+  def flatMap[A, B](p: Parser[A])(f: A => Parser[B]): Parser[B]
 
   //exercise 9.4
   def listOfN[A](n: Int, p: Parser[A]): Parser[List[A]] = {
@@ -56,6 +73,13 @@ trait Parsers[Parser[+ _]] {
     }
     go(n, p, succeed(Nil: List[A]))
   }
+
+  val numA: Parser[Int] = char('a').many.map(_.size)
+  //exercise 9.6
+  val numAndTrailingA: Parser[(Int, String)] = for {
+    num <- "[0-9]+".r.map(_.toInt)
+    st <- listOfN(num, char('a')).map(_.mkString(""))
+  } yield (num, st)
 
   case class ParserOps[A](p: Parser[A]) {
     def |[B >: A](p2: Parser[B]): Parser[B] = {
@@ -75,6 +99,8 @@ trait Parsers[Parser[+ _]] {
     def map[B](f: A => B): Parser[B] = self.map(p)(f)
 
     def map2[B, C](p2: Parser[B])(f: (A, B) => C): Parser[C] = self.map2(p, p2)(f)
+
+    def flatMap[B](f: A => Parser[B]): Parser[B] = self.flatMap(p)(f)
 
     def product[B](p2: Parser[B]): Parser[(A, B)] = self.product(p, p2)
 
