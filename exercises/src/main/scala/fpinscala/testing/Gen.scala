@@ -143,8 +143,10 @@ object Gen {
     Gen(State.unit(a))
   }
 
-  def boolean: Gen[Boolean] = {
-    Gen(State(RNG.int).map(_ < 0))
+  val int: Gen[Int] = Gen(State(RNG.int))
+
+  val boolean: Gen[Boolean] = {
+    int.map(_ < 0)
   }
 
   def listOfN[A](n: Int, g: Gen[A]): Gen[List[A]] = {
@@ -156,17 +158,22 @@ object Gen {
   }
 
   def option[A](g: Gen[A]): Gen[Option[A]] = {
-    Gen(g.sample.map(Some(_)))
+    g.map(Some(_))
   }
 
-  def char: Gen[Char] = {
-    Gen(State(RNG.int).map(_.toChar))
+  val char: Gen[Char] = {
+    int.map(_.toChar)
   }
 
-  def string(minLength: Int, maxLength: Int): Gen[String] = {
-    val length = choose(minLength, maxLength + 1)
-    Gen(length.sample.flatMap(listOfN(_, char).sample.map(_.mkString(""))))
+  val asciiChar: Gen[Char] = {
+    choose(0, 128).map(_.toChar)
   }
+
+  def stringN(length: Int): Gen[String] = {
+    listOfN(length, char).map(_.mkString(""))
+  }
+
+  val string: SGen[String] = SGen(stringN)
 
   //exercise 8.7 (using result of 8.8)
   def union[A](g1: Gen[A], g2: Gen[A]): Gen[A] = {
@@ -238,6 +245,7 @@ case class Gen[A](sample: State[RNG, A]) {
 }
 
 case class SGen[A](forSize: Int => Gen[A]) {
+  def apply(n: Int): Gen[A] = forSize(n)
   //exercise 8.11
   def map[B](f: A => B): SGen[B] = {
     SGen(forSize andThen (_.map(f)))
@@ -245,6 +253,10 @@ case class SGen[A](forSize: Int => Gen[A]) {
 
   def flatMap[B](f: A => Gen[B]): SGen[B] = {
     SGen(forSize andThen (_.flatMap(f)))
+  }
+
+  def **(s2: SGen[A]): SGen[(A, A)] = {
+    SGen(n => apply(n) ** s2(n))
   }
 }
 
