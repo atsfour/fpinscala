@@ -5,7 +5,8 @@ import scala.util.matching.Regex
 import fpinscala.testing._
 import fpinscala.testing.Prop._
 
-trait Parsers[Err, Parser[+ _]] {
+
+trait Parsers[Parser[+ _]] {
   self =>
   // so inner classes may call methods of trait
 
@@ -26,7 +27,17 @@ trait Parsers[Err, Parser[+ _]] {
 
   def slice[A](p: Parser[A]): Parser[String]
 
-  def succeed[A](a: A): Parser[A] = string("") map (_ => a)
+  def succeed[A](a: A): Parser[A]
+
+  def fail[A](msg: String): Parser[A]
+
+  def flatMap[A, B](p: Parser[A])(f: A => Parser[B]): Parser[B]
+
+  def label[A](msg: String)(p: Parser[A]): Parser[A]
+
+  def scope[A](msg: String)(p: Parser[A]): Parser[A]
+
+  def attempt[A](p: Parser[A]): Parser[A]
 
   //exercise 9.7
   def product[A, B](p1: Parser[A], p2: => Parser[B]): Parser[(A, B)] = for {
@@ -62,8 +73,6 @@ trait Parsers[Err, Parser[+ _]] {
     a <- p1
     b <- p2
   } yield f(a, b)
-
-  def flatMap[A, B](p: Parser[A])(f: A => Parser[B]): Parser[B]
 
   //exercise 9.4
   def listOfN[A](n: Int, p: Parser[A]): Parser[List[A]] = {
@@ -149,10 +158,36 @@ trait Parsers[Err, Parser[+ _]] {
       equal(left, right)(in)
     }
 
-    def productMapLaw[A,B,C,D](p1: Parser[A], p2: Parser[B])(f: A => C, g: B => D)(in: Gen[String]): Prop = {
+    def productMapLaw[A, B, C, D](p1: Parser[A], p2: Parser[B])(f: A => C, g: B => D)(in: Gen[String]): Prop = {
       val left = p1.map(f) ** p2.map(g)
-      val right = (p1 ** p2).map{case (a, b) => (f(a), g(b))}
+      val right = (p1 ** p2).map { case (a, b) => (f(a), g(b)) }
       equal(left, right)(in)
+    }
+
+    def labelLaw[A](p: Parser[A], inputs: SGen[String]): Prop = {
+      forAll(inputs ** Gen.string) { case (input, msg) =>
+        run(label(msg)(p))(input) match {
+          case Left(e) => e.stack.head._2 == msg
+          case Right(_) => true
+        }
+      }
+    }
+
+    def scopeLaw[A](p: Parser[A], inputs: SGen[String]): Prop = {
+      forAll(inputs ** Gen.string) { case (input, msg) =>
+        run(p)(input) match {
+          case Left(e1) => {
+            run(scope(msg)(p))(input) match {
+              case Left(e2) => {
+                e2.stack.head._2 == msg &&
+                  e2.stack.tail == e1.stack
+              }
+              case _ => false
+            }
+          }
+          case _ => true
+        }
+      }
     }
   }
 
@@ -174,6 +209,19 @@ case class Location(input: String, offset: Int = 0) {
     else ""
 }
 
-case class ParseError(stack: List[(Location, String)] = List(),
-                      otherFailures: List[ParseError] = List()) {
+case class ParseError(stack: List[(Location, String)]) {
+
+  def push(loc: Location, msg: String): ParseError = {
+    copy(stack = (loc, msg) :: stack)
+  }
+
+  def label(s: String): ParseError = {
+    ParseError(latestLoc.map((_, s)).toList)
+  }
+
+  private def latestLoc: Option[Location] = {
+    latest.map(_._1)
+  }
+
+  private def latest = stack.lastOption
 }
