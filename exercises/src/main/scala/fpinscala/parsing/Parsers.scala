@@ -151,8 +151,8 @@ trait Parsers[Parser[+ _]] {
 
     //exercise 9.2
     def productAssociativeLaw[A, B, C](p1: Parser[A], p2: Parser[B], p3: Parser[C])(in: Gen[String]): Prop = {
-      def unbiasL[A, B, C](p: ((A, B), C)): (A, B, C) = (p._1._1, p._1._2, p._2)
-      def unbiasR[A, B, C](p: (A, (B, C))): (A, B, C) = (p._1, p._2._1, p._2._2)
+      def unbiasL(p: ((A, B), C)): (A, B, C) = (p._1._1, p._1._2, p._2)
+      def unbiasR(p: (A, (B, C))): (A, B, C) = (p._1, p._2._1, p._2._2)
       val left = (p1 ** p2) ** p3 map unbiasL
       val right = p1 ** (p2 ** p3) map unbiasR
       equal(left, right)(in)

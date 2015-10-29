@@ -112,7 +112,7 @@ object Prop {
   }
 
   def checkPar(p: Par[Boolean]): Prop = {
-    forAllPar(unit())(_ => p)
+    forAllPar(unit(()))(_ => p)
   }
 
   def run(p: Prop,

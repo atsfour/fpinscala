@@ -131,7 +131,7 @@ object Monoid {
       }
       val zero = None
     }
-    foldMapV(ints, orderdMonid)(i => Some(i, i, true)).map(_._3).getOrElse(true)
+    foldMapV(ints, orderdMonid)(i => Some((i, i, true))).map(_._3).getOrElse(true)
   }
 
   sealed trait WC
