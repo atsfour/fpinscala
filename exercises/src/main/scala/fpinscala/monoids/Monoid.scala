@@ -98,24 +98,10 @@ object Monoid {
   def foldMapV[A, B](as: IndexedSeq[A], m: Monoid[B])(f: A => B): B = as.length match {
     case 0 => m.zero
     case 1 => f(as.head)
-    case n => {
+    case n =>
       val (lHalf, rHalf) = as.splitAt(n / 2)
       m.op(foldMapV(lHalf, m)(f), foldMapV(rHalf, m)(f))
-    }
   }
-
-  //exercise 10.9
-  def orderedNonMonoid(ints: IndexedSeq[Int]): Boolean = {
-    ints.foldLeft((Int.MinValue, true)){case ((acc, b), i) => (i, b && (i >= acc))}._2
-  }
-
-  def ordered(ints: IndexedSeq[Int]): Boolean = {
-    ???
-  }
-
-  sealed trait WC
-  case class Stub(chars: String) extends WC
-  case class Part(lStub: String, words: Int, rStub: String) extends WC
 
   //exercise 10.8
   def par[A](m: Monoid[A]): Monoid[Par[A]] = new Monoid[Par[A]] {
@@ -127,10 +113,56 @@ object Monoid {
     Par.parMap(v)(f).flatMap(bs => foldMapV(v, par(m))(Par.asyncF(f)))
   }
 
+ //exercise 10.9
+  def orderedWithoutMonoid(ints: IndexedSeq[Int]): Boolean = {
+    ints.foldLeft((Int.MinValue, true)){case ((acc, b), i) => (i, b && (i >= acc))}._2
+  }
 
-  val wcMonoid: Monoid[WC] = sys.error("todo")
+  def ordered(ints: IndexedSeq[Int]): Boolean = {
+    type OIIB = Option[(Int, Int, Boolean)]
+    def orderdMonid: Monoid[OIIB] = new Monoid[OIIB] {
+      def op(o1: OIIB, o2: OIIB): OIIB = (o1, o2) match{
+        case (None, None) => None
+        case (Some(x), None) => Some(x)
+        case (None, Some(x)) => Some(x)
+        case (Some((x1, y1, b1)), Some((x2, y2, b2))) => {
+          Some((x1 min x2, y1 min y2, b1 && b2 && y1 <= x2))
+        }
+      }
+      val zero = None
+    }
+    foldMapV(ints, orderdMonid)(i => Some(i, i, true)).map(_._3).getOrElse(true)
+  }
 
-  def count(s: String): Int = sys.error("todo")
+  sealed trait WC
+  case class Stub(chars: String) extends WC
+  case class Part(lStub: String, words: Int, rStub: String) extends WC
+
+  //exercise 10.10
+  val wcMonoid: Monoid[WC] = new Monoid[WC] {
+    def op(wc1: WC, wc2: WC): WC = (wc1, wc2) match {
+      case (Stub(a), Stub(b)) => Stub(a + b)
+      case (Stub(a), Part(l, i, r)) => Part(a + l, i, r)
+      case (Part(l, i, r), Stub(b)) => Part(l, i, r + b)
+      case (Part(l1, i1, r1), Part(l2, i2, r2)) =>
+        Part(l1, i1 + (if ((r1 + l2).isEmpty) 0 else 1) + i2, r2)
+    }
+    val zero = Stub("")
+  }
+
+  //exercise 10.11
+  def count(s: String): Int = {
+    def toWC(c: Char): WC = {
+      if (c.isWhitespace) Part("", 0, "")
+      else Stub(c.toString)
+    }
+    def unstub(s: String): Int = if (s == "") 0 else 1
+
+    foldMapV(s.toIndexedSeq, wcMonoid)(toWC) match {
+      case Stub(s) => unstub(s)
+      case Part(l, i, r) => unstub(l) + 1 + unstub(r)
+    }
+  }
 
   def productMonoid[A,B](A: Monoid[A], B: Monoid[B]): Monoid[(A, B)] =
     sys.error("todo")
