@@ -53,6 +53,11 @@ object Monoid {
     val zero: A => A = identity
   }
 
+  def dual[A](m: Monoid[A]): Monoid[A] = new Monoid[A] {
+    def op(x: A, y: A) = m.op(y, x)
+    val zero: A = m.zero
+  }
+
   // TODO: Placeholder for `Prop`. Remove once you have implemented the `Prop`
   // data type from Part 2.
 
@@ -74,32 +79,54 @@ object Monoid {
   def trimMonoid(s: String): Monoid[String] = sys.error("todo")
 
   def concatenate[A](as: List[A], m: Monoid[A]): A =
-    sys.error("todo")
+    as.foldLeft(m.zero)(m.op)
 
+  //exercise 10.5
   def foldMap[A, B](as: List[A], m: Monoid[B])(f: A => B): B =
-    sys.error("todo")
+    as.foldLeft(m.zero)((b, a) => m.op(b, f(a)))
 
-  def foldRight[A, B](as: List[A])(z: B)(f: (A, B) => B): B =
-    sys.error("todo")
+  //exercise 10.6
+  def foldRight[A, B](as: List[A])(z: B)(f: (A, B) => B): B = {
+    foldMap(as, endoMonoid[B])(f.curried)(z)
+  }
 
-  def foldLeft[A, B](as: List[A])(z: B)(f: (B, A) => B): B =
-    sys.error("todo")
+  def foldLeft[A, B](as: List[A])(z: B)(f: (B, A) => B): B = {
+    foldMap(as, dual(endoMonoid[B]))(a => b => f(b, a))(z)
+  }
 
-  def foldMapV[A, B](as: IndexedSeq[A], m: Monoid[B])(f: A => B): B =
-    sys.error("todo")
+  //exercise 10.7
+  def foldMapV[A, B](as: IndexedSeq[A], m: Monoid[B])(f: A => B): B = as.length match {
+    case 0 => m.zero
+    case 1 => f(as.head)
+    case n => {
+      val (lHalf, rHalf) = as.splitAt(n / 2)
+      m.op(foldMapV(lHalf, m)(f), foldMapV(rHalf, m)(f))
+    }
+  }
 
-  def ordered(ints: IndexedSeq[Int]): Boolean =
-    sys.error("todo")
+  //exercise 10.9
+  def orderedNonMonoid(ints: IndexedSeq[Int]): Boolean = {
+    ints.foldLeft((Int.MinValue, true)){case ((acc, b), i) => (i, b && (i >= acc))}._2
+  }
+
+  def ordered(ints: IndexedSeq[Int]): Boolean = {
+    ???
+  }
 
   sealed trait WC
   case class Stub(chars: String) extends WC
   case class Part(lStub: String, words: Int, rStub: String) extends WC
 
-  def par[A](m: Monoid[A]): Monoid[Par[A]] =
-    sys.error("todo")
+  //exercise 10.8
+  def par[A](m: Monoid[A]): Monoid[Par[A]] = new Monoid[Par[A]] {
+    def op(p1: Par[A], p2: Par[A]): Par[A] = p1.map2(p2)(m.op)
+    val zero: Par[A] = Par.unit(m.zero)
+  }
 
-  def parFoldMap[A,B](v: IndexedSeq[A], m: Monoid[B])(f: A => B): Par[B] =
-    sys.error("todo")
+  def parFoldMap[A,B](v: IndexedSeq[A], m: Monoid[B])(f: A => B): Par[B] ={
+    Par.parMap(v)(f).flatMap(bs => foldMapV(v, par(m))(Par.asyncF(f)))
+  }
+
 
   val wcMonoid: Monoid[WC] = sys.error("todo")
 
